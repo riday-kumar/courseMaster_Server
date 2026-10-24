@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const dns = require("dns");
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 // importing auth routes
 const authRoutes = require("./src/routes/auth.routes");
 // importing course routes
@@ -18,6 +20,7 @@ const errorHandler = require("./src/middlewares/errorMiddleware");
 const userRoutes = require("./src/routes/user.routes");
 
 const connectDB = require("./src/config/db");
+const { seedDatabase } = require("./seed");
 
 // Connect to database (non-blocking for serverless)
 connectDB().catch((err) => {
@@ -27,10 +30,22 @@ connectDB().catch((err) => {
 
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"], // Include PUT and DELETE
+  allowedHeaders: ["Content-Type", "Authorization", "X-Custom-Header"], // Include any custom headers
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 // Code-10 bug: custom header restricts allowed methods to GET and POST, breaking PUT/DELETE CORS preflights
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Methods", "GET, POST");
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept",
+  );
   next();
 });
 app.use(express.json());
@@ -39,10 +54,13 @@ app.use(express.json());
 app.use(async (req, res, next) => {
   try {
     await connectDB();
+    // await seedDatabase();
     next();
   } catch (err) {
     console.error("Database connection middleware error:", err.message);
-    res.status(500).json({ message: "Database connection failed", error: err.message });
+    res
+      .status(500)
+      .json({ message: "Database connection failed", error: err.message });
   }
 });
 
@@ -65,7 +83,6 @@ app.use("/api/assignments", assignmentRoutes);
 app.use("/api/quizzes", quizRoutes);
 // mounting user routes
 app.use("/api/users", userRoutes);
-
 
 // 404 handler (unknown routes)
 app.use((req, res) => {
